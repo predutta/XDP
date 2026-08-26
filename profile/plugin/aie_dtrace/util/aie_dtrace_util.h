@@ -52,10 +52,6 @@ namespace xdp::aie::dtrace {
 
   // ========================================================================================
 
-  // Enable JSON dtrace_dump output with coalesced results by default.
-  // Must run before XRT creates the first dtrace module (config keys lock on first read).
-  void initDtraceOutputConfig();
-
 } // namespace xdp::aie::dtrace
 
 #endif

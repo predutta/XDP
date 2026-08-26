@@ -6,7 +6,6 @@
 #include "xdp/profile/plugin/aie_dtrace/ve2/aie_dtrace_ve2.h"
 #include "xdp/profile/plugin/aie_dtrace/ve2/aie_dtrace_ct_writer.h"
 #include "xdp/profile/plugin/aie_dtrace/ve2/elf_helper.h"
-#include "xdp/profile/plugin/aie_dtrace/util/aie_dtrace_util.h"
 
 #include "core/common/api/hw_context_int.h"
 #include "core/common/api/kernel_int.h"
@@ -111,14 +110,12 @@ namespace xdp {
     AieDtraceCTWriter ctWriter(db, metadata, deviceID, partitionStartCol);
 
     // Determine which metric families are configured for this run. Both the
-    // interface-tile bandwidth metrics and the core-tile compute_io_bound metric
-    // can be emitted into the same per-run CT file.
-    bool includeComputeIoBound = false;
+    // interface-tile bandwidth metrics and one core-tile metric set can be
+    // emitted into the same per-run CT file.
+    std::string coreMetricSet;
     for (const auto& tc : metadata->getConfigMetricsVec(CORE_MODULE_IDX)) {
-      if (tc.second == "compute_io_bound") {
-        includeComputeIoBound = true;
-        break;
-      }
+      coreMetricSet = tc.second;
+      break;
     }
 
     // Interface-tile bandwidth metrics are configured by default unless the user
@@ -144,7 +141,7 @@ namespace xdp {
           + std::to_string(bandwidthChannel) + ") from configuration");
     }
 
-    if (!includeBandwidth && !includeComputeIoBound && !metadata->isL2L2Enabled()) {
+    if (!includeBandwidth && coreMetricSet.empty() && !metadata->isL2L2Enabled()) {
       xrt_core::message::send(severity_level::info, "XRT",
           "AIE dtrace: No metrics configured; skipping CT generation.");
       return;
@@ -152,20 +149,18 @@ namespace xdp {
 
     if (!ctWriter.generateCT(outputPath, hwctx, it->second,
                              includeBandwidth, bandwidthMetricSet, bandwidthChannel,
-                             includeComputeIoBound))
+                             coreMetricSet))
       return;
-
-    aie::dtrace::initDtraceOutputConfig();
 
     std::stringstream genMsg;
     genMsg << "AIE dtrace: CT generated for kernel '" << kernel_name << "' (";
     if (includeBandwidth)
       genMsg << "interface_tile=" << bandwidthMetricSet;
-    if (includeBandwidth && (includeComputeIoBound || metadata->isL2L2Enabled()))
+    if (includeBandwidth && (!coreMetricSet.empty() || metadata->isL2L2Enabled()))
       genMsg << ", ";
-    if (includeComputeIoBound)
-      genMsg << "aie_tile=compute_io_bound (core tiles 0_0 and 0_1)";
-    if (includeComputeIoBound && metadata->isL2L2Enabled())
+    if (!coreMetricSet.empty())
+      genMsg << "aie_tile=" << coreMetricSet;
+    if (!coreMetricSet.empty() && metadata->isL2L2Enabled())
       genMsg << ", ";
     if (metadata->isL2L2Enabled())
       genMsg << "memtile=l2_l2_transfer";
