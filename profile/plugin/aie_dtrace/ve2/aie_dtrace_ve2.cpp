@@ -163,7 +163,7 @@ namespace xdp {
     if (!coreMetricSet.empty() && metadata->isL2L2Enabled())
       genMsg << ", ";
     if (metadata->isL2L2Enabled())
-      genMsg << "memtile=l2_l2_transfer";
+      genMsg << "memtile=input_ports";
     genMsg << ")";
     xrt_core::message::send(severity_level::debug, "XRT", genMsg.str());
 

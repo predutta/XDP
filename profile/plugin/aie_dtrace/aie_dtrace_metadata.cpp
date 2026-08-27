@@ -36,7 +36,7 @@ namespace xdp {
     return metrics;
   }
 
-  static constexpr const char* L2L2_TRANSFER_METRIC_SET = "l2_l2_transfer";
+  static constexpr const char* INPUT_PORTS_METRIC_SET = "input_ports";
 
   bool settingsRequestL2L2Transfer(const std::vector<std::string>& metricsSettings)
   {
@@ -44,7 +44,7 @@ namespace xdp {
       std::vector<std::string> parts;
       boost::split(parts, setting, boost::is_any_of(":"));
       for (const auto& part : parts) {
-        if (part == L2L2_TRANSFER_METRIC_SET)
+        if (part == INPUT_PORTS_METRIC_SET)
           return true;
       }
     }
@@ -71,7 +71,7 @@ namespace xdp {
 
     if (usingBlob) {
       if (ci.mem_tile.has_value() && !ci.mem_tile->empty()) {
-        if (*ci.mem_tile == L2L2_TRANSFER_METRIC_SET) {
+        if (*ci.mem_tile == INPUT_PORTS_METRIC_SET) {
           l2L2TransferEnabled = true;
           xrt_core::message::send(severity_level::info, "XRT",
               "AIE dtrace: enabling L2-L2 via mem_tile metric '" + *ci.mem_tile
@@ -86,10 +86,10 @@ namespace xdp {
 
     if (l2L2TransferEnabled) {
       const auto designPoints = aie::dtrace::parseL2L2DesignPoints(
-          xrt_core::config::get_aie_dtrace_settings_l2_l2_design_points());
+          xrt_core::config::get_aie_dtrace_settings_memory_tile_input_ports());
       if (designPoints.empty()) {
         xrt_core::message::send(severity_level::warning, "XRT",
-            "AIE dtrace: L2-L2 is enabled but AIE_dtrace_settings.l2_l2_design_points is "
+            "AIE dtrace: L2-L2 is enabled but AIE_dtrace_settings.memory_tile_input_ports is "
             "empty or invalid (expected {column,row:port} entries). "
             "L2-L2 counters will not be appended to the CT.");
       }
@@ -140,7 +140,7 @@ namespace xdp {
       "tile_based_interface_tile_metrics",
       "tile_based_aie_metrics",
       "tile_based_memory_tile_metrics",
-      "l2_l2_design_points",
+      "memory_tile_input_ports",
       "configure_aie_hardware",
       "config_one_partition",
     };

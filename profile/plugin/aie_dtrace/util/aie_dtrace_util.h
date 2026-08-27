@@ -40,7 +40,7 @@ namespace xdp::aie::dtrace {
     std::string eventType;         // "running" or "stalled"
   };
 
-  // Parses AIE_dtrace_settings.l2_l2_design_points, e.g. "{1,1:2},{5,1:1},{5,1:2}".
+  // Parses AIE_dtrace_settings.memory_tile_input_ports, e.g. "{1,1:2},{5,1:1},{5,1:2}".
   // INI uses {column,row:port} for readability; row is ignored — counters use MEM_TILE_ROW_START.
   std::vector<L2L2InstrumentPoint> parseL2L2DesignPoints(const std::string& spec);
 
