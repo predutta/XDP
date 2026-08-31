@@ -830,11 +830,16 @@ namespace xdp {
           traceStartEvent = (XAie_Events) (XAIE_EVENT_BROADCAST_0_MEM + traceStartBroadcastCh1->getBc());
         }
         
+        auto iter0 = configChannel0.find(tile);
+        auto iter1 = configChannel1.find(tile);
+        uint8_t channel0 = (iter0 == configChannel0.end()) ? 0 : iter0->second;
+        uint8_t channel1 = (iter1 == configChannel1.end()) ? 1 : iter1->second;
+        
         // Configure event ports on stream switch
         // NOTE: These are events from the core module stream switch
         //       outputted on the memory module trace stream. 
         streamPorts = aie::trace::configStreamSwitchPorts(aieDevInst, tile,
-            xaieTile, loc, type, metricSet, 0, 0, memoryEvents, aieConfig);
+            xaieTile, loc, type, metricSet, channel0, channel1, memoryEvents, aieConfig);
           
         // Set overall start/end for trace capture
         if (memoryTrace->setCntrEvent(traceStartEvent, traceEndEvent) != XAIE_OK)
@@ -854,10 +859,6 @@ namespace xdp {
 
         // Specify Sel0/Sel1 for memory tile events 21-44
         if (type == module_type::mem_tile) {
-          auto iter0 = configChannel0.find(tile);
-          auto iter1 = configChannel1.find(tile);
-          uint8_t channel0 = (iter0 == configChannel0.end()) ? 0 : iter0->second;
-          uint8_t channel1 = (iter1 == configChannel1.end()) ? 1 : iter1->second;
           aie::trace::configEventSelections(aieDevInst, tile, loc, type, metricSet, channel0, 
                                             channel1, cfgTile->memory_tile_trace_config);
         }
@@ -1741,8 +1742,13 @@ namespace xdp {
           }
         }
 
+        auto iter0 = configChannel0.find(tile);
+        auto iter1 = configChannel1.find(tile);
+        uint8_t channel0 = (iter0 == configChannel0.end()) ? 0 : iter0->second;
+        uint8_t channel1 = (iter1 == configChannel1.end()) ? 1 : iter1->second;
+
         // Configure stream switch ports (core SS DMA monitors feeding MEM-side trace)
-        configStreamSwitchPorts(tile, loc, type, metricSet, 0, 0, memoryEvents, aieConfig);
+        configStreamSwitchPorts(tile, loc, type, metricSet, channel0, channel1, memoryEvents, aieConfig);
 
         memoryModTraceStartEvent = traceStartEvent;
         if (XAie_TraceStopEvent(&aieDevInst, loc, mod, traceEndEvent) != XAIE_OK)
@@ -1761,11 +1767,6 @@ namespace xdp {
             cfgTile->memory_tile_trace_config.stop_event = phyEvent2;
           }
         }
-
-        auto iter0 = configChannel0.find(tile);
-        auto iter1 = configChannel1.find(tile);
-        uint8_t channel0 = (iter0 == configChannel0.end()) ? 0 : iter0->second;
-        uint8_t channel1 = (iter1 == configChannel1.end()) ? 1 : iter1->second;
 
         if (type == module_type::mem_tile) {
           configEventSelections(tile, loc, type, metricSet, channel0, channel1, cfgTile->memory_tile_trace_config);
@@ -1810,7 +1811,10 @@ namespace xdp {
 
           ++numMemoryTraceEvents;
 
-          configEdgeEvents(tile, type, metricSet, memoryEvents[i], channel0);
+          auto portnum = xdp::aie::getPortNumberFromEvent(memoryEvents[i]);
+          uint8_t channelNum = portnum % 2;
+          uint8_t channel = (channelNum == 0) ? channel0 : channel1;
+          configEdgeEvents(tile, type, metricSet, memoryEvents[i], channel);
 
           uint16_t phyEvent = 0;
           const XAie_ModuleType phyModConv = isCoreEvent ? XAIE_CORE_MOD : XAIE_MEM_MOD;
