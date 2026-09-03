@@ -69,32 +69,6 @@ namespace xdp {
     const bool usingBlob = profiling_runtime_config::has_control_instrumentation();
     const auto& ci = profiling_runtime_config::control_instrumentation();
 
-    if (usingBlob) {
-      if (ci.mem_tile.has_value() && !ci.mem_tile->empty()) {
-        if (*ci.mem_tile == INPUT_PORTS_METRIC_SET) {
-          l2L2TransferEnabled = true;
-          xrt_core::message::send(severity_level::info, "XRT",
-              "AIE dtrace: enabling L2-L2 via mem_tile metric '" + *ci.mem_tile
-              + "' from Debug.profiling_runtime_config.");
-        } else {
-          xrt_core::message::send(severity_level::info, "XRT",
-              "AIE dtrace: mem tile metric '" + *ci.mem_tile
-              + "' from profiling_runtime_config will be supported in a follow-up.");
-        }
-      }
-    }
-
-    if (l2L2TransferEnabled) {
-      const auto designPoints = aie::dtrace::parseL2L2DesignPoints(
-          xrt_core::config::get_aie_dtrace_settings_memory_tile_input_ports());
-      if (designPoints.empty()) {
-        xrt_core::message::send(severity_level::warning, "XRT",
-            "AIE dtrace: L2-L2 is enabled but AIE_dtrace_settings.memory_tile_input_ports is "
-            "empty or invalid (expected {column,row:port} entries). "
-            "L2-L2 counters will not be appended to the CT.");
-      }
-    }
-
     // Core (aie) tile metrics (e.g. compute_io_bound). Only used to enable the
     // metric; the tiles themselves are fixed to the first column.
     std::vector<std::string> aieMetricsSettings;
@@ -130,6 +104,85 @@ namespace xdp {
 
     getConfigMetricsForInterfaceTiles(SHIM_MODULE_IDX, metricsSettings);
 
+    // Memory tile / L2-L2: blob and xrt.ini are separate config sources. If either
+    // mem_tile or memory_tile_input_ports appears in control_instrumentation, the
+    // whole mem-tile L2-L2 config must come from the blob (both fields). Otherwise
+    // both tile_based_memory_tile_metrics and memory_tile_input_ports must be in xrt.ini.
+    const std::string memTileSettings =
+        xrt_core::config::get_aie_dtrace_settings_tile_based_memory_tile_metrics();
+    const bool iniL2L2Enabled = !memTileSettings.empty()
+        && settingsRequestL2L2Transfer(getSettingsVector(memTileSettings));
+    const std::string iniPorts =
+        xrt_core::config::get_aie_dtrace_settings_memory_tile_input_ports();
+    const bool iniPortsSet = !iniPorts.empty();
+    const bool blobPortsSet = usingBlob && ci.memory_tile_input_ports.has_value()
+                           && !ci.memory_tile_input_ports->empty();
+    const bool memTileFieldFromBlob = usingBlob && ci.mem_tile.has_value()
+                                   && !ci.mem_tile->empty();
+    const bool memTileUsesBlob = usingBlob && (memTileFieldFromBlob || blobPortsSet);
+
+    bool l2L2FromBlob = false;
+    if (memTileUsesBlob) {
+      if (memTileFieldFromBlob && *ci.mem_tile == INPUT_PORTS_METRIC_SET) {
+        l2L2TransferEnabled = true;
+        l2L2FromBlob = true;
+        xrt_core::message::send(severity_level::info, "XRT",
+            "AIE dtrace: enabling L2-L2 via mem_tile metric '" + *ci.mem_tile
+            + "' from Debug.profiling_runtime_config.");
+      } else if (memTileFieldFromBlob) {
+        xrt_core::message::send(severity_level::info, "XRT",
+            "AIE dtrace: mem tile metric '" + *ci.mem_tile
+            + "' from profiling_runtime_config will be supported in a follow-up.");
+      }
+    }
+    else {
+      l2L2TransferEnabled = iniL2L2Enabled;
+    }
+
+    if (blobPortsSet && !l2L2FromBlob) {
+      xrt_core::message::send(severity_level::error, "XRT",
+          "AIE dtrace: profiling_runtime_config.control_instrumentation.memory_tile_input_ports "
+          "is set but mem_tile is not 'input_ports'. Set "
+          "\"mem_tile\": \"input_ports\" under control_instrumentation to enable L2-L2.");
+    }
+
+    if (iniPortsSet && !iniL2L2Enabled && !memTileUsesBlob) {
+      xrt_core::message::send(severity_level::error, "XRT",
+          "AIE dtrace: AIE_dtrace_settings.memory_tile_input_ports is set but "
+          "tile_based_memory_tile_metrics does not include 'input_ports'. Add "
+          "tile_based_memory_tile_metrics=all:input_ports (or equivalent) to enable L2-L2.");
+    }
+
+    if (l2L2TransferEnabled) {
+      const std::string portsStr = profiling_runtime_config::resolveMemoryTileInputPorts();
+      const auto designPoints = aie::dtrace::parseL2L2DesignPoints(portsStr);
+      if (designPoints.empty()) {
+        if (portsStr.empty()) {
+          if (l2L2FromBlob) {
+            xrt_core::message::send(severity_level::error, "XRT",
+                "AIE dtrace: profiling_runtime_config.control_instrumentation.mem_tile is "
+                "'input_ports' but memory_tile_input_ports is missing or empty. Add design points "
+                "as a {column,row:port} list under control_instrumentation "
+                "(e.g. \"memory_tile_input_ports\": \"{1,1:2},{5,1:1},{5,1:2}\"). "
+                "L2-L2 counters will not be appended to the CT.");
+          } else {
+            xrt_core::message::send(severity_level::error, "XRT",
+                "AIE dtrace: AIE_dtrace_settings.tile_based_memory_tile_metrics includes "
+                "'input_ports' but memory_tile_input_ports is missing or empty. Add design points "
+                "as a {column,row:port} list in xrt.ini "
+                "(e.g. memory_tile_input_ports={1,1:2},{5,1:1},{5,1:2}). "
+                "L2-L2 counters will not be appended to the CT.");
+          }
+        } else {
+          xrt_core::message::send(severity_level::warning, "XRT",
+              "AIE dtrace: L2-L2 is enabled but memory_tile_input_ports is invalid "
+              "(expected {column,row:port} entries). "
+              "L2-L2 counters will not be appended to the CT.");
+        }
+        l2L2TransferEnabled = false;
+      }
+    }
+
     xrt_core::message::send(severity_level::info, "XRT", "Finished parsing AIE dtrace metadata.");
   }
 
@@ -148,12 +201,6 @@ namespace xdp {
     auto tree = xrt_core::config::detail::get_ptree_value("AIE_dtrace_settings");
     if (auto val = tree.get_optional<bool>("config_one_partition"))
       configOnePartition = *val;
-
-    l2L2TransferEnabled = false;
-    const std::string memTileSettings =
-        xrt_core::config::get_aie_dtrace_settings_tile_based_memory_tile_metrics();
-    if (!memTileSettings.empty())
-      l2L2TransferEnabled = settingsRequestL2L2Transfer(getSettingsVector(memTileSettings));
 
     for (ptree::iterator pos = tree.begin(); pos != tree.end(); pos++) {
       if (validSettings.find(pos->first) == validSettings.end()) {

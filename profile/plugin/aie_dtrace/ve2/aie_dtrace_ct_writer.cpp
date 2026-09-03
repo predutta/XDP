@@ -12,6 +12,7 @@
 
 #include "core/common/config_reader.h"
 #include "core/common/message.h"
+#include "xdp/profile/plugin/vp_base/profiling_runtime_config.h"
 
 #include <algorithm>
 #include <filesystem>
@@ -1387,7 +1388,7 @@ void AieDtraceCTWriter::appendL2L2Config(
       : static_cast<uint32_t>(aiePartitionPt.back().second.get<uint64_t>("num_cols", 0));
 
   const auto instrumentPoints = aie::dtrace::parseL2L2DesignPoints(
-      xrt_core::config::get_aie_dtrace_settings_memory_tile_input_ports());
+      profiling_runtime_config::resolveMemoryTileInputPorts());
   if (instrumentPoints.empty())
     return;
 
