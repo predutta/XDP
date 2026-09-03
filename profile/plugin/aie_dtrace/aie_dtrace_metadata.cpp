@@ -176,7 +176,8 @@ namespace xdp {
         } else {
           xrt_core::message::send(severity_level::warning, "XRT",
               "AIE dtrace: L2-L2 is enabled but memory_tile_input_ports is invalid "
-              "(expected {column,row:port} entries). "
+              "(expected {column,row:port} entries; column is partition-relative, "
+              "0 = partition start). "
               "L2-L2 counters will not be appended to the CT.");
         }
         l2L2TransferEnabled = false;

@@ -62,7 +62,8 @@ namespace xdp::aie::dtrace {
     if (spec.empty())
       return points;
 
-    // Format: {column,row:port} — row is accepted for INI readability only (ignored).
+    // Format: {column,row:port} — column is partition-relative (0 = partition
+    // start_col); row is accepted for readability only (ignored).
     static const std::regex pointRegex(R"(\{\s*(\d+)\s*,\s*(\d+)\s*:\s*(\d+)\s*\})");
     const auto begin = std::sregex_iterator(spec.begin(), spec.end(), pointRegex);
     const auto end = std::sregex_iterator();
@@ -93,7 +94,8 @@ namespace xdp::aie::dtrace {
     if (numCols == 0 || instrumentPoints.empty())
       return {};
 
-    const uint32_t endCol = startCol + numCols;
+    // Design-point columns are partition-relative (0 .. numCols-1). Counters and
+    // CT addresses use the same relative column as the rest of the CT writer.
     std::vector<L2L2CounterPoint> points;
     points.reserve(instrumentPoints.size() * 2);
 
@@ -101,7 +103,7 @@ namespace xdp::aie::dtrace {
     std::map<uint8_t, uint8_t> nextCounterByColumn;
     for (const auto& instrumentPoint : instrumentPoints) {
       const uint32_t column = instrumentPoint.column;
-      if (column < startCol || column >= endCol)
+      if (column >= numCols)
         continue;
 
       uint8_t& nextCounter = nextCounterByColumn[instrumentPoint.column];
@@ -113,6 +115,7 @@ namespace xdp::aie::dtrace {
       nextCounter = static_cast<uint8_t>(nextCounter + 2);
     }
 
+    (void)startCol;
     return points;
   }
 

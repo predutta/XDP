@@ -1409,7 +1409,8 @@ void AieDtraceCTWriter::appendL2L2Config(
     std::stringstream l2Msg;
     l2Msg << "AIE dtrace: L2-L2 design points are invalid for this partition (start_col="
           << static_cast<int>(partitionStartCol) << ", num_cols=" << numCols
-          << "). Check memory_tile_input_ports {column,row:dstPort} entries per memtile (max "
+          << "). Check memory_tile_input_ports {column,row:dstPort} entries: column is "
+          << "partition-relative (0 .. num_cols-1; 0 = start_col), max "
           << static_cast<int>(aie::dtrace::L2L2_MAX_DST_PATHS_PER_COLUMN)
           << "). Skipping L2-L2 CT append.";
     xrt_core::message::send(severity_level::warning, "XRT", l2Msg.str());

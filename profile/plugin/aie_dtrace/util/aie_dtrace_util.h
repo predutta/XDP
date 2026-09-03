@@ -40,11 +40,12 @@ namespace xdp::aie::dtrace {
     std::string eventType;         // "running" or "stalled"
   };
 
-  // Parses AIE_dtrace_settings.memory_tile_input_ports, e.g. "{1,1:2},{5,1:1},{5,1:2}".
-  // INI uses {column,row:port} for readability; row is ignored — counters use MEM_TILE_ROW_START.
+  // Parses memory_tile_input_ports, e.g. "{1,1:2},{5,1:1},{5,1:2}".
+  // Column is partition-relative (0 = partition start_col); row is ignored.
   std::vector<L2L2InstrumentPoint> parseL2L2DesignPoints(const std::string& spec);
 
-  // Builds running+stalled counter pairs from xrt.ini design points within the partition.
+  // Builds running+stalled counter pairs from design points within the partition.
+  // startCol is reserved for diagnostics; columns in instrumentPoints are relative.
   std::vector<L2L2CounterPoint> getL2L2CounterPoints(
       uint32_t startCol,
       uint32_t numCols,
