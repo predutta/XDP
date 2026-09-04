@@ -23,7 +23,7 @@ namespace xdp::aie::dtrace {
   // Inter-stamp memtile halo dst paths; design points come from xrt.ini.
   // Max dst halo paths per memtile column (4 perf counters, running+stalled per path).
   static constexpr uint8_t L2L2_MAX_DST_PATHS_PER_COLUMN = 2;
-  // Memtile row 0 (absolute array row 1; row 0 = shim/interface tile).
+  // Memtile row 1 (absolute array row 1; row 0 = shim/interface tile).
   static constexpr uint8_t MEM_TILE_ROW_START = 1;
 
   struct L2L2InstrumentPoint {
