@@ -1394,10 +1394,28 @@ void AieDtraceCTWriter::appendL2L2Config(
   if (!metadata || !metadata->isL2L2Enabled())
     return;
 
-  boost::property_tree::ptree aiePartitionPt = xdp::aie::getAIEPartitionInfo(hwctx);
-  const uint32_t numCols = aiePartitionPt.empty() ? 0
-      : static_cast<uint32_t>(aiePartitionPt.back().second.get<uint64_t>("num_cols", 0));
+  if (!hwctx) {
+    xrt_core::message::send(severity_level::debug, "XRT",
+        "AIE dtrace: No hwctx provided for L2-L2 configuration");
+    return;
+  }
 
+  boost::property_tree::ptree aiePartitionPt;
+  try {
+    aiePartitionPt = xdp::aie::getAIEPartitionInfo(hwctx);
+  }
+  catch (const std::exception& e) {
+    xrt_core::message::send(severity_level::warning, "XRT",
+        std::string("AIE dtrace: Error getting partition info for L2-L2: ") + e.what());
+    return;
+  }
+  if (aiePartitionPt.empty())
+    return;
+
+  const uint32_t numCols =
+      static_cast<uint32_t>(aiePartitionPt.back().second.get<uint64_t>("num_cols", 0));
+  if (numCols == 0)
+    return;
   const auto instrumentPoints = aie::dtrace::parseL2L2DesignPoints(
       profiling_runtime_config::resolveMemoryTileInputPorts());
   if (instrumentPoints.empty())
