@@ -10,7 +10,6 @@
 #include "xdp/profile/database/static_info/aie_constructs.h"
 #include "xdp/profile/database/static_info/aie_util.h"
 
-#include "core/common/config_reader.h"
 #include "core/common/message.h"
 #include "xdp/profile/plugin/vp_base/profiling_runtime_config.h"
 
