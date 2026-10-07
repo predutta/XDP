@@ -77,7 +77,8 @@ namespace xdp::profiling_runtime_config {
     parse_control_instrumentation(const pt::ptree& ci_tree)
     {
       static const std::set<std::string> known_keys{
-        "aie_tile", "mem_tile", "interface_tile", "memory_tile_input_ports"
+        "aie_tile", "mem_tile", "interface_tile", "memory_tile_input_ports",
+        "memory_tile_conflicts"
       };
 
       control_instrumentation_t ci;
@@ -105,6 +106,12 @@ namespace xdp::profiling_runtime_config {
           ci.memory_tile_input_ports = value;
           if (!value.empty())
             info("profiling_runtime_config.control_instrumentation.memory_tile_input_ports='"
+                 + value + "'");
+        }
+        else if (key == "memory_tile_conflicts") {
+          ci.memory_tile_conflicts = value;
+          if (!value.empty())
+            info("profiling_runtime_config.control_instrumentation.memory_tile_conflicts='"
                  + value + "'");
         }
         else {
@@ -205,7 +212,8 @@ namespace xdp::profiling_runtime_config {
             out.has_ci = out.ci.aie_tile.has_value()
                      || out.ci.mem_tile.has_value()
                      || out.ci.interface_tile.has_value()
-                     || out.ci.memory_tile_input_ports.has_value();
+                     || out.ci.memory_tile_input_ports.has_value()
+                     || out.ci.memory_tile_conflicts.has_value();
           }
 
           if (const auto et_opt = root.get_child_optional("event_trace")) {
@@ -282,6 +290,33 @@ namespace xdp::profiling_runtime_config {
         return {};
     }
     return xrt_core::config::get_aie_dtrace_settings_memory_tile_input_ports();
+  }
+
+  std::string
+  resolveMemoryTileConflicts()
+  {
+    static constexpr const char* MEMORY_CONFLICTS_METRIC_SET = "memory_conflicts";
+
+    if (has_control_instrumentation()) {
+      const auto& ci = control_instrumentation();
+      const bool memTileFieldFromBlob = ci.mem_tile.has_value() && !ci.mem_tile->empty();
+      const bool blobConflictsSet = ci.memory_tile_conflicts.has_value()
+                                 && !ci.memory_tile_conflicts->empty();
+      const bool conflictsUsesBlob = (memTileFieldFromBlob
+                                      && *ci.mem_tile == MEMORY_CONFLICTS_METRIC_SET)
+                                  || blobConflictsSet;
+
+      if (memTileFieldFromBlob && *ci.mem_tile == MEMORY_CONFLICTS_METRIC_SET) {
+        if (blobConflictsSet)
+          return *ci.memory_tile_conflicts;
+        return {};
+      }
+
+      // Partial blob conflicts config: do not fall back to xrt.ini.
+      if (conflictsUsesBlob)
+        return {};
+    }
+    return xrt_core::config::get_aie_dtrace_settings_memory_tile_conflicts();
   }
 
   bool

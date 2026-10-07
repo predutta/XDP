@@ -42,6 +42,7 @@ class AieDtraceMetadata {
     void* handle = nullptr;
     bool configOnePartition = false;
     bool l2L2TransferEnabled = false;
+    bool memoryConflictsEnabled = false;
 
     // True when the mem tile setting asked for every column rather than naming
     // one, in which case configMetrics holds a single placeholder entry.
@@ -84,6 +85,8 @@ class AieDtraceMetadata {
     bool isConfigOnePartition() const { return configOnePartition; }
 
     bool isL2L2Enabled() const { return l2L2TransferEnabled; }
+
+    bool isMemoryConflictsEnabled() const { return memoryConflictsEnabled; }
 
     // When true the mem tile metric applies to every column in the partition and
     // the config map holds only a placeholder column.

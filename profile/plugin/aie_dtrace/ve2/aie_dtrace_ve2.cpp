@@ -165,7 +165,7 @@ namespace xdp {
     }
 
     if (!includeBandwidth && coreMetricSet.empty() && memTileMetricSet.empty()
-        && !metadata->isL2L2Enabled()) {
+        && !metadata->isL2L2Enabled() && !metadata->isMemoryConflictsEnabled()) {
       xrt_core::message::send(severity_level::info, "XRT",
           "AIE dtrace: No metrics configured; skipping CT generation.");
       return;
@@ -180,20 +180,24 @@ namespace xdp {
 
     std::stringstream genMsg;
     genMsg << "AIE dtrace: CT generated for kernel '" << kernel_name << "' (";
+    bool needComma = false;
+    auto appendPart = [&](const std::string& part) {
+      if (needComma)
+        genMsg << ", ";
+      genMsg << part;
+      needComma = true;
+    };
     if (includeBandwidth)
-      genMsg << "interface_tile=" << bandwidthMetricSet;
-    if (includeBandwidth && (!coreMetricSet.empty() || metadata->isL2L2Enabled()))
-      genMsg << ", ";
+      appendPart("interface_tile=" + bandwidthMetricSet);
     if (!coreMetricSet.empty())
-      genMsg << "aie_tile=" << coreMetricSet;
-    if (!coreMetricSet.empty() && metadata->isL2L2Enabled())
-      genMsg << ", ";
+      appendPart("aie_tile=" + coreMetricSet);
     if (metadata->isL2L2Enabled())
-      genMsg << "memtile=input_ports";
+      appendPart("memtile=input_ports");
+    if (metadata->isMemoryConflictsEnabled())
+      appendPart("memtile=memory_conflicts");
     if (!memTileMetricSet.empty())
-      genMsg << ((includeBandwidth || !coreMetricSet.empty()) ? ", " : "")
-             << "memtile=" << memTileMetricSet << ":ch"
-             << static_cast<int>(memTileChannel);
+      appendPart("memtile=" + memTileMetricSet + ":ch"
+                 + std::to_string(static_cast<int>(memTileChannel)));
     genMsg << ")";
     xrt_core::message::send(severity_level::debug, "XRT", genMsg.str());
 

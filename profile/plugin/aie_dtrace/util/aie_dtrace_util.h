@@ -50,6 +50,28 @@ namespace xdp::aie::dtrace {
       uint32_t numCols,
       const std::vector<L2L2InstrumentPoint>& instrumentPoints);
 
+  // =========================== Memtile memory conflicts =====================================
+
+  // Group_Memory_Conflict (event 111); counted on memtile perf counter 4 so L2-L2
+  // (counters 0-3) can run on the same tile.
+  static constexpr uint8_t MEMORY_CONFLICT_COUNTER = 4;
+  static constexpr uint8_t GROUP_MEMORY_CONFLICT_EVENT = 111;
+
+  struct MemoryConflictTile {
+    uint8_t column = 0;  // partition-relative
+    uint8_t row = 0;     // absolute array row (required)
+  };
+
+  // Parses memory_tile_conflicts, e.g. "{1,1},{5,1},{9,1}".
+  // Column is partition-relative; row selects the exact memtile.
+  std::vector<MemoryConflictTile> parseMemoryConflictTiles(const std::string& spec);
+
+  // Keeps tiles with column in [0, numCols) and row in validMemRows (if non-empty).
+  std::vector<MemoryConflictTile> filterMemoryConflictTiles(
+      uint32_t numCols,
+      const std::vector<uint8_t>& validMemRows,
+      const std::vector<MemoryConflictTile>& tiles);
+
   // ========================================================================================
   // Apply JSON + coalesced dtrace_dump defaults when those keys are absent.
   // Values already present in xrt.ini or the environment are left unchanged.

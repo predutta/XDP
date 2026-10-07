@@ -5,6 +5,7 @@
 
 #include "xdp/profile/plugin/aie_dtrace/util/aie_dtrace_util.h"
 
+#include <algorithm>
 #include <map>
 #include <regex>
 #include "core/common/config_reader.h"
@@ -173,6 +174,57 @@ namespace xdp::aie::dtrace {
     }
 
     return points;
+  }
+
+  std::vector<MemoryConflictTile> parseMemoryConflictTiles(const std::string& spec)
+  {
+    std::vector<MemoryConflictTile> tiles;
+    if (spec.empty())
+      return tiles;
+
+    // Format: {column,row} — column partition-relative; row is the memtile row.
+    static const std::regex tileRegex(R"(\{\s*(\d+)\s*,\s*(\d+)\s*\})");
+    const auto begin = std::sregex_iterator(spec.begin(), spec.end(), tileRegex);
+    const auto end = std::sregex_iterator();
+    for (auto it = begin; it != end; ++it) {
+      try {
+        const unsigned long column = std::stoul((*it)[1].str());
+        const unsigned long row = std::stoul((*it)[2].str());
+        if (column > 255 || row > 255)
+          continue;
+
+        MemoryConflictTile tile;
+        tile.column = static_cast<uint8_t>(column);
+        tile.row = static_cast<uint8_t>(row);
+        tiles.push_back(tile);
+      }
+      catch (const std::exception&) {
+        continue;
+      }
+    }
+    return tiles;
+  }
+
+  std::vector<MemoryConflictTile> filterMemoryConflictTiles(
+      uint32_t numCols,
+      const std::vector<uint8_t>& validMemRows,
+      const std::vector<MemoryConflictTile>& tiles)
+  {
+    std::vector<MemoryConflictTile> filtered;
+    if (numCols == 0 || tiles.empty())
+      return filtered;
+
+    filtered.reserve(tiles.size());
+    for (const auto& tile : tiles) {
+      if (tile.column >= numCols)
+        continue;
+      if (!validMemRows.empty()
+          && std::find(validMemRows.begin(), validMemRows.end(), tile.row)
+               == validMemRows.end())
+        continue;
+      filtered.push_back(tile);
+    }
+    return filtered;
   }
 
 } // namespace xdp::aie::dtrace
