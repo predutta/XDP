@@ -39,32 +39,6 @@ namespace xdp {
   static constexpr const char* INPUT_PORTS_METRIC_SET = "input_ports";
   static constexpr const char* MEMORY_CONFLICTS_METRIC_SET = "memory_conflicts";
 
-  bool settingsRequestL2L2Transfer(const std::vector<std::string>& metricsSettings)
-  {
-    for (const auto& setting : metricsSettings) {
-      std::vector<std::string> parts;
-      boost::split(parts, setting, boost::is_any_of(":"));
-      for (const auto& part : parts) {
-        if (part == INPUT_PORTS_METRIC_SET)
-          return true;
-      }
-    }
-    return false;
-  }
-
-  bool settingsRequestMemoryConflicts(const std::vector<std::string>& metricsSettings)
-  {
-    for (const auto& setting : metricsSettings) {
-      std::vector<std::string> parts;
-      boost::split(parts, setting, boost::is_any_of(":"));
-      for (const auto& part : parts) {
-        if (part == MEMORY_CONFLICTS_METRIC_SET)
-          return true;
-      }
-    }
-    return false;
-  }
-
   // Mem tile (L2) metric sets other than L2-L2 transfers, which is selected by
   // INPUT_PORTS_METRIC_SET above and handled separately. output_channels_details
   // measures a single MM2S channel: port running, memory starvation, stream
@@ -78,17 +52,28 @@ namespace xdp {
     return metrics;
   }
 
-  bool settingsRequestMemTileDmaChannels(const std::vector<std::string>& metricsSettings)
+  struct MemTileRequests {
+    bool l2L2Transfer = false;     // input_ports
+    bool memoryConflicts = false;  // memory_conflicts
+    bool dmaChannels = false;      // output_channels_details / mm2s_channels_details
+  };
+
+  MemTileRequests getMemTileRequests(const std::vector<std::string>& metricsSettings)
   {
+    MemTileRequests requests;
     for (const auto& setting : metricsSettings) {
       std::vector<std::string> parts;
       boost::split(parts, setting, boost::is_any_of(":"));
       for (const auto& part : parts) {
-        if ((part != "off") && (memTileMetricSets().count(part) > 0))
-          return true;
+        if (part == INPUT_PORTS_METRIC_SET)
+          requests.l2L2Transfer = true;
+        else if (part == MEMORY_CONFLICTS_METRIC_SET)
+          requests.memoryConflicts = true;
+        else if ((part != "off") && (memTileMetricSets().count(part) > 0))
+          requests.dmaChannels = true;
       }
     }
-    return false;
+    return requests;
   }
 
   AieDtraceMetadata::AieDtraceMetadata(uint64_t deviceID, void* handle)
@@ -153,10 +138,9 @@ namespace xdp {
     // xrt.ini and in the blob alike, and each one needs only its own list.
     const std::string memTileSettings =
         xrt_core::config::get_aie_dtrace_settings_tile_based_memory_tile_metrics();
-    const bool iniL2L2Enabled = !memTileSettings.empty()
-        && settingsRequestL2L2Transfer(getSettingsVector(memTileSettings));
-    const bool iniConflictsEnabled = !memTileSettings.empty()
-        && settingsRequestMemoryConflicts(getSettingsVector(memTileSettings));
+    const MemTileRequests iniRequests = getMemTileRequests(getSettingsVector(memTileSettings));
+    const bool iniL2L2Enabled = iniRequests.l2L2Transfer;
+    const bool iniConflictsEnabled = iniRequests.memoryConflicts;
     const std::string iniPorts =
         xrt_core::config::get_aie_dtrace_settings_memory_tile_input_ports();
     const bool iniPortsSet = !iniPorts.empty();
@@ -170,6 +154,7 @@ namespace xdp {
                                    && !ci.mem_tile->empty();
     const std::vector<std::string> blobMemTileSettings = memTileFieldFromBlob
         ? getSettingsVector("all:" + *ci.mem_tile) : std::vector<std::string>{};
+    const MemTileRequests blobRequests = getMemTileRequests(blobMemTileSettings);
     const bool memTileUsesBlob = usingBlob
         && (memTileFieldFromBlob || blobPortsSet || blobPointsSet);
 
@@ -182,7 +167,7 @@ namespace xdp {
     bool l2L2FromBlob = false;
     bool conflictsFromBlob = false;
     if (memTileUsesBlob) {
-      if (settingsRequestL2L2Transfer(blobMemTileSettings)) {
+      if (blobRequests.l2L2Transfer) {
         l2L2TransferEnabled = true;
         l2L2FromBlob = true;
         xrt_core::message::send(severity_level::info, "XRT",
@@ -194,7 +179,7 @@ namespace xdp {
             + "' from Debug.profiling_runtime_config.");
         memTileMetricsSettings = getSettingsVector("all:" + *ci.mem_tile);
       }
-      if (settingsRequestMemoryConflicts(blobMemTileSettings)) {
+      if (blobRequests.memoryConflicts) {
         memoryConflictsEnabled = true;
         conflictsFromBlob = true;
         xrt_core::message::send(severity_level::info, "XRT",
@@ -213,12 +198,11 @@ namespace xdp {
     memTileMetricsSettings.erase(
         std::remove_if(memTileMetricsSettings.begin(), memTileMetricsSettings.end(),
             [](const std::string& setting) {
-              return settingsRequestMemoryConflicts({setting});
+              return getMemTileRequests({setting}).memoryConflicts;
             }),
         memTileMetricsSettings.end());
 
-    memTileDmaChannelsEnabled = settingsRequestMemTileDmaChannels(
-        memTileUsesBlob ? blobMemTileSettings : getSettingsVector(memTileSettings));
+    memTileDmaChannelsEnabled = (memTileUsesBlob ? blobRequests : iniRequests).dmaChannels;
     if (l2L2TransferEnabled && memTileDmaChannelsEnabled) {
       xrt_core::message::send(severity_level::warning, "XRT",
           "AIE dtrace: L2-L2 transfers and a per-tile mem tile metric set cannot be "
