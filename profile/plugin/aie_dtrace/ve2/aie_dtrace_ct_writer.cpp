@@ -1540,7 +1540,7 @@ void AieDtraceCTWriter::appendMemoryConflictsConfig(
                                            "memory_tile");
     info.metricSet = "memory_conflicts";
     info.portDirection.clear();
-    info.eventType = "conflict";
+    info.eventType = "memtile_memory_conflict";
     counters.push_back(info);
   }
 
@@ -1687,9 +1687,9 @@ bool AieDtraceCTWriter::generateCT(
         "AIE dtrace: Unsupported core (aie) tile metric set '" + coreMetricSet
         + "'; no core tile counters configured.");
 
-  // Both mem tile families program the same performance counters, so at most one of
-  // them is ever configured: the metadata resolves the contention and clears the
-  // per-tile metric set when L2-L2 wins.
+  // L2-L2 uses memtile counters 0-3; memory_conflicts uses counter 4 — both may append.
+  // Per-tile sets such as output_channels_details also use 0-3; metadata clears them
+  // when L2-L2 wins.
   appendL2L2Config(hwctx, allCounters, beginBlockWrites);
 
   // Memory conflicts use mem tile counter 4, which neither family above programs.
