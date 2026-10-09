@@ -62,9 +62,12 @@ namespace xdp::aie::dtrace {
     uint8_t row = 0;     // absolute array row (required)
   };
 
-  // Parses memory_tile_conflicts, e.g. "{1,1},{5,1},{9,1}".
-  // Column is partition-relative; row selects the exact memtile.
-  std::vector<MemoryConflictTile> parseMemoryConflictTiles(const std::string& spec);
+  // Parses memory_tile_conflict_points, e.g. "{1,1:all},{5,1:all},{9,1:}".
+  // Column is partition-relative; row selects the exact memtile. Bank "all" or empty
+  // is accepted; a specific bank number is skipped (future development, warned about
+  // when warnBankNumbers is true). Invalid entries are ignored. Each tile is returned once.
+  std::vector<MemoryConflictTile> parseMemoryConflictPoints(const std::string& spec,
+                                                            bool warnBankNumbers = false);
 
   // Keeps tiles with column in [0, numCols) and row in validMemRows (if non-empty).
   std::vector<MemoryConflictTile> filterMemoryConflictTiles(

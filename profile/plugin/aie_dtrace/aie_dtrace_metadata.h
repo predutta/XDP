@@ -43,6 +43,8 @@ class AieDtraceMetadata {
     bool configOnePartition = false;
     bool l2L2TransferEnabled = false;
     bool memoryConflictsEnabled = false;
+    // Mem tile DMA channel metric set (output_channels_details / mm2s_channels_details).
+    bool memTileDmaChannelsEnabled = false;
 
     // True when the mem tile setting asked for every column rather than naming
     // one, in which case configMetrics holds a single placeholder entry.
@@ -87,6 +89,8 @@ class AieDtraceMetadata {
     bool isL2L2Enabled() const { return l2L2TransferEnabled; }
 
     bool isMemoryConflictsEnabled() const { return memoryConflictsEnabled; }
+
+    bool isMemTileDmaChannelsEnabled() const { return memTileDmaChannelsEnabled; }
 
     // When true the mem tile metric applies to every column in the partition and
     // the config map holds only a placeholder column.

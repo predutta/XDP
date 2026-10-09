@@ -26,8 +26,8 @@
 // load-time gate.
 //
 // Example blob:
-//   {"control_instrumentation":{"aie_tile":"func_stalls","mem_tile":"input_ports","interface_tile":"ddr_bandwidth",
-//    "memory_tile_input_ports":"{1,1:2},{5,1:1}","memory_tile_conflicts":"{1,1},{5,1}"},
+//   {"control_instrumentation":{"aie_tile":"func_stalls","mem_tile":"input_ports;memory_conflicts","interface_tile":"ddr_bandwidth",
+//    "memory_tile_input_ports":"{1,1:2},{5,1:1}","memory_tile_conflict_points":"{1,1:all},{5,1:all}"},
 //    "event_trace":{"tile_based_aie_tile_metrics":"all:functions"}}
 
 namespace xdp::profiling_runtime_config {
@@ -37,7 +37,7 @@ namespace xdp::profiling_runtime_config {
     std::optional<std::string> mem_tile;       // maps to "mem_tile" module internally
     std::optional<std::string> interface_tile; // maps to "shim" module internally
     std::optional<std::string> memory_tile_input_ports; // L2-L2 {column,row:port} list
-    std::optional<std::string> memory_tile_conflicts;   // conflicts {column,row} list
+    std::optional<std::string> memory_tile_conflict_points; // conflicts {column,row:bank} list
   };
 
   // Mirrors the AIE_trace_settings.* xrt.ini keys 1:1. When event_trace is
@@ -111,7 +111,7 @@ namespace xdp::profiling_runtime_config {
 
   // True when is_set() and the blob contained a control_instrumentation object
   // with at least one recognized key (aie_tile / mem_tile / interface_tile /
-  // memory_tile_input_ports / memory_tile_conflicts).
+  // memory_tile_input_ports / memory_tile_conflict_points).
   XDP_CORE_EXPORT bool has_control_instrumentation();
 
   // Returns the cached control_instrumentation view. Safe to call even when
@@ -119,15 +119,15 @@ namespace xdp::profiling_runtime_config {
   XDP_CORE_EXPORT const control_instrumentation_t& control_instrumentation();
 
   // When control_instrumentation carries mem_tile or memory_tile_input_ports,
-  // ports come only from the blob (requires mem_tile "input_ports"). Otherwise
-  // AIE_dtrace_settings.memory_tile_input_ports from xrt.ini is used.
+  // ports come only from the blob (requires mem_tile to include "input_ports").
+  // Otherwise AIE_dtrace_settings.memory_tile_input_ports from xrt.ini is used.
   XDP_CORE_EXPORT std::string resolveMemoryTileInputPorts();
 
-  // When control_instrumentation carries mem_tile "memory_conflicts" or
-  // memory_tile_conflicts, the tile list comes only from the blob (requires
-  // mem_tile "memory_conflicts"). Otherwise AIE_dtrace_settings.memory_tile_conflicts
-  // from xrt.ini is used.
-  XDP_CORE_EXPORT std::string resolveMemoryTileConflicts();
+  // When control_instrumentation carries any mem tile key, the conflict points come
+  // only from the blob (requires mem_tile to include "memory_conflicts", e.g.
+  // "input_ports;memory_conflicts"). Otherwise
+  // AIE_dtrace_settings.memory_tile_conflict_points from xrt.ini is used.
+  XDP_CORE_EXPORT std::string resolveMemoryTileConflictPoints();
 
   // True when is_set() and the blob contained an "event_trace" object (even
   // if empty). Note this only reflects presence in the blob - it is NOT an

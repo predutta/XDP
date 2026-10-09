@@ -8,6 +8,8 @@
 #include <algorithm>
 #include <map>
 #include <regex>
+#include <set>
+#include <utility>
 #include "core/common/config_reader.h"
 #include "core/common/message.h"
 
@@ -176,26 +178,47 @@ namespace xdp::aie::dtrace {
     return points;
   }
 
-  std::vector<MemoryConflictTile> parseMemoryConflictTiles(const std::string& spec)
+  std::vector<MemoryConflictTile> parseMemoryConflictPoints(const std::string& spec,
+                                                            bool warnBankNumbers)
   {
     std::vector<MemoryConflictTile> tiles;
     if (spec.empty())
       return tiles;
 
-    // Format: {column,row} — column partition-relative; row is the memtile row.
-    static const std::regex tileRegex(R"(\{\s*(\d+)\s*,\s*(\d+)\s*\})");
-    const auto begin = std::sregex_iterator(spec.begin(), spec.end(), tileRegex);
+    // Format: {column,row:bank} — column partition-relative; row is the memtile row.
+    // Bank "all" (or empty) monitors every bank. A specific bank number is a future
+    // development and is skipped for now.
+    static const std::regex pointRegex(R"(\{\s*(\d+)\s*,\s*(\d+)\s*:\s*([^\s}]*)\s*\})");
+    static const std::regex bankNumberRegex(R"(\d+)");
+    std::set<std::pair<uint8_t, uint8_t>> seenTiles;
+    const auto begin = std::sregex_iterator(spec.begin(), spec.end(), pointRegex);
     const auto end = std::sregex_iterator();
     for (auto it = begin; it != end; ++it) {
       try {
         const unsigned long column = std::stoul((*it)[1].str());
         const unsigned long row = std::stoul((*it)[2].str());
+        const std::string bank = (*it)[3].str();
         if (column > 255 || row > 255)
           continue;
 
+        if (std::regex_match(bank, bankNumberRegex)) {
+          if (warnBankNumbers)
+            xrt_core::message::send(severity_level::warning, "XRT",
+                "AIE dtrace: memory_tile_conflict_points entry '" + it->str()
+                + "': monitoring a specific bank is a future development. Skipping this entry.");
+          continue;
+        }
+        if (!bank.empty() && bank != "all")
+          continue;
+
+        const auto tileKey = std::make_pair(static_cast<uint8_t>(column),
+                                            static_cast<uint8_t>(row));
+        if (!seenTiles.insert(tileKey).second)
+          continue;
+
         MemoryConflictTile tile;
-        tile.column = static_cast<uint8_t>(column);
-        tile.row = static_cast<uint8_t>(row);
+        tile.column = tileKey.first;
+        tile.row = tileKey.second;
         tiles.push_back(tile);
       }
       catch (const std::exception&) {
@@ -214,7 +237,6 @@ namespace xdp::aie::dtrace {
     if (numCols == 0 || tiles.empty())
       return filtered;
 
-    filtered.reserve(tiles.size());
     for (const auto& tile : tiles) {
       if (tile.column >= numCols)
         continue;

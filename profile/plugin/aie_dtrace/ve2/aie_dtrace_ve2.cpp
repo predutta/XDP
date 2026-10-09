@@ -180,24 +180,24 @@ namespace xdp {
 
     std::stringstream genMsg;
     genMsg << "AIE dtrace: CT generated for kernel '" << kernel_name << "' (";
-    bool needComma = false;
-    auto appendPart = [&](const std::string& part) {
-      if (needComma)
-        genMsg << ", ";
-      genMsg << part;
-      needComma = true;
-    };
     if (includeBandwidth)
-      appendPart("interface_tile=" + bandwidthMetricSet);
+      genMsg << "interface_tile=" << bandwidthMetricSet;
+    if (includeBandwidth && (!coreMetricSet.empty() || metadata->isL2L2Enabled()))
+      genMsg << ", ";
     if (!coreMetricSet.empty())
-      appendPart("aie_tile=" + coreMetricSet);
+      genMsg << "aie_tile=" << coreMetricSet;
+    if (!coreMetricSet.empty() && metadata->isL2L2Enabled())
+      genMsg << ", ";
     if (metadata->isL2L2Enabled())
-      appendPart("memtile=input_ports");
+      genMsg << "memtile=input_ports";
     if (metadata->isMemoryConflictsEnabled())
-      appendPart("memtile=memory_conflicts");
+      genMsg << ((includeBandwidth || !coreMetricSet.empty() || metadata->isL2L2Enabled())
+                 ? ", " : "")
+             << "memtile=memory_conflicts";
     if (!memTileMetricSet.empty())
-      appendPart("memtile=" + memTileMetricSet + ":ch"
-                 + std::to_string(static_cast<int>(memTileChannel)));
+      genMsg << ((includeBandwidth || !coreMetricSet.empty()) ? ", " : "")
+             << "memtile=" << memTileMetricSet << ":ch"
+             << static_cast<int>(memTileChannel);
     genMsg << ")";
     xrt_core::message::send(severity_level::debug, "XRT", genMsg.str());
 

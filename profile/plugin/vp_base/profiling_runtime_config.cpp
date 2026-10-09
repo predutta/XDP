@@ -3,10 +3,13 @@
 
 #define XDP_CORE_SOURCE
 
+#include <algorithm>
 #include <set>
 #include <sstream>
 #include <string>
+#include <vector>
 
+#include <boost/algorithm/string.hpp>
 #include <boost/property_tree/json_parser.hpp>
 #include <boost/property_tree/ptree.hpp>
 
@@ -78,7 +81,7 @@ namespace xdp::profiling_runtime_config {
     {
       static const std::set<std::string> known_keys{
         "aie_tile", "mem_tile", "interface_tile", "memory_tile_input_ports",
-        "memory_tile_conflicts"
+        "memory_tile_conflict_points"
       };
 
       control_instrumentation_t ci;
@@ -108,10 +111,10 @@ namespace xdp::profiling_runtime_config {
             info("profiling_runtime_config.control_instrumentation.memory_tile_input_ports='"
                  + value + "'");
         }
-        else if (key == "memory_tile_conflicts") {
-          ci.memory_tile_conflicts = value;
+        else if (key == "memory_tile_conflict_points") {
+          ci.memory_tile_conflict_points = value;
           if (!value.empty())
-            info("profiling_runtime_config.control_instrumentation.memory_tile_conflicts='"
+            info("profiling_runtime_config.control_instrumentation.memory_tile_conflict_points='"
                  + value + "'");
         }
         else {
@@ -213,7 +216,7 @@ namespace xdp::profiling_runtime_config {
                      || out.ci.mem_tile.has_value()
                      || out.ci.interface_tile.has_value()
                      || out.ci.memory_tile_input_ports.has_value()
-                     || out.ci.memory_tile_conflicts.has_value();
+                     || out.ci.memory_tile_conflict_points.has_value();
           }
 
           if (const auto et_opt = root.get_child_optional("event_trace")) {
@@ -247,6 +250,17 @@ namespace xdp::profiling_runtime_config {
       return has_event_trace() ? blobValue : iniGetter();
     }
 
+    // True when the mem_tile value lists metricSet, splitting on ';' and ':' and
+    // ignoring spaces the same way aie_dtrace splits tile_based_memory_tile_metrics.
+    bool
+    mem_tile_requests(std::string memTile, const std::string& metricSet)
+    {
+      boost::replace_all(memTile, " ", "");
+      std::vector<std::string> parts;
+      boost::split(parts, memTile, boost::is_any_of(";:"));
+      return std::find(parts.begin(), parts.end(), metricSet) != parts.end();
+    }
+
   } // anonymous namespace
 
   bool
@@ -277,9 +291,11 @@ namespace xdp::profiling_runtime_config {
       const bool memTileFieldFromBlob = ci.mem_tile.has_value() && !ci.mem_tile->empty();
       const bool blobPortsSet = ci.memory_tile_input_ports.has_value()
                              && !ci.memory_tile_input_ports->empty();
-      const bool memTileUsesBlob = memTileFieldFromBlob || blobPortsSet;
+      const bool blobPointsSet = ci.memory_tile_conflict_points.has_value()
+                              && !ci.memory_tile_conflict_points->empty();
+      const bool memTileUsesBlob = memTileFieldFromBlob || blobPortsSet || blobPointsSet;
 
-      if (memTileFieldFromBlob && *ci.mem_tile == INPUT_PORTS_METRIC_SET) {
+      if (memTileFieldFromBlob && mem_tile_requests(*ci.mem_tile, INPUT_PORTS_METRIC_SET)) {
         if (blobPortsSet)
           return *ci.memory_tile_input_ports;
         return {};
@@ -293,30 +309,30 @@ namespace xdp::profiling_runtime_config {
   }
 
   std::string
-  resolveMemoryTileConflicts()
+  resolveMemoryTileConflictPoints()
   {
     static constexpr const char* MEMORY_CONFLICTS_METRIC_SET = "memory_conflicts";
 
     if (has_control_instrumentation()) {
       const auto& ci = control_instrumentation();
       const bool memTileFieldFromBlob = ci.mem_tile.has_value() && !ci.mem_tile->empty();
-      const bool blobConflictsSet = ci.memory_tile_conflicts.has_value()
-                                 && !ci.memory_tile_conflicts->empty();
-      const bool conflictsUsesBlob = (memTileFieldFromBlob
-                                      && *ci.mem_tile == MEMORY_CONFLICTS_METRIC_SET)
-                                  || blobConflictsSet;
+      const bool blobPortsSet = ci.memory_tile_input_ports.has_value()
+                             && !ci.memory_tile_input_ports->empty();
+      const bool blobPointsSet = ci.memory_tile_conflict_points.has_value()
+                              && !ci.memory_tile_conflict_points->empty();
+      const bool memTileUsesBlob = memTileFieldFromBlob || blobPortsSet || blobPointsSet;
 
-      if (memTileFieldFromBlob && *ci.mem_tile == MEMORY_CONFLICTS_METRIC_SET) {
-        if (blobConflictsSet)
-          return *ci.memory_tile_conflicts;
+      if (memTileFieldFromBlob && mem_tile_requests(*ci.mem_tile, MEMORY_CONFLICTS_METRIC_SET)) {
+        if (blobPointsSet)
+          return *ci.memory_tile_conflict_points;
         return {};
       }
 
-      // Partial blob conflicts config: do not fall back to xrt.ini.
-      if (conflictsUsesBlob)
+      // Partial blob mem-tile config: do not fall back to xrt.ini points.
+      if (memTileUsesBlob)
         return {};
     }
-    return xrt_core::config::get_aie_dtrace_settings_memory_tile_conflicts();
+    return xrt_core::config::get_aie_dtrace_settings_memory_tile_conflict_points();
   }
 
   bool

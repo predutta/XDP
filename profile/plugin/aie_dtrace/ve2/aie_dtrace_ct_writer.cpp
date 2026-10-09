@@ -1150,8 +1150,6 @@ bool AieDtraceCTWriter::writeCounterCTFile(
           ctFile << "\"r\"";
         else if (ctr.eventType == "stalled")
           ctFile << "\"s\"";
-        else if (ctr.eventType == "conflict")
-          ctFile << "\"c\"";
         else
           ctFile << "\"" << ctr.eventType << "\"";
       }
@@ -1515,17 +1513,15 @@ void AieDtraceCTWriter::appendMemoryConflictsConfig(
   for (uint32_t i = 0; i < driverConfig.mem_num_rows; ++i)
     validMemRows.push_back(static_cast<uint8_t>(driverConfig.mem_row_start + i));
 
-  const auto parsedTiles = aie::dtrace::parseMemoryConflictTiles(
-      profiling_runtime_config::resolveMemoryTileConflicts());
+  const auto parsedTiles = aie::dtrace::parseMemoryConflictPoints(
+      profiling_runtime_config::resolveMemoryTileConflictPoints());
   auto tiles = aie::dtrace::filterMemoryConflictTiles(numCols, validMemRows, parsedTiles);
   if (tiles.empty()) {
     std::stringstream msg;
-    msg << "AIE dtrace: memory_tile_conflicts tiles are invalid for this partition "
+    msg << "AIE dtrace: no memory_tile_conflict_points tile is inside this partition "
         << "(start_col=" << static_cast<int>(partitionStartCol)
-        << ", num_cols=" << numCols << "). Expected {column,row} with column "
-        << "partition-relative (0 .. num_cols-1) and row in the memtile row range. "
-        << "Skipping memory_conflicts CT append.";
-    xrt_core::message::send(severity_level::warning, "XRT", msg.str());
+        << ", num_cols=" << numCols << "). Memory conflicts will not be monitored.";
+    xrt_core::message::send(severity_level::error, "XRT", msg.str());
     return;
   }
 
@@ -1691,10 +1687,12 @@ bool AieDtraceCTWriter::generateCT(
         "AIE dtrace: Unsupported core (aie) tile metric set '" + coreMetricSet
         + "'; no core tile counters configured.");
 
-  // L2-L2 uses memtile counters 0-3; memory_conflicts uses counter 4 — both may append.
-  // Per-tile sets such as output_channels_details also use 0-3; metadata clears them
-  // when L2-L2 wins.
+  // Both mem tile families program the same performance counters, so at most one of
+  // them is ever configured: the metadata resolves the contention and clears the
+  // per-tile metric set when L2-L2 wins.
   appendL2L2Config(hwctx, allCounters, beginBlockWrites);
+
+  // Memory conflicts use mem tile counter 4, which neither family above programs.
   appendMemoryConflictsConfig(hwctx, allCounters, beginBlockWrites);
 
   // Mem tile counters live on rows between the shim and the core tiles, so they land in
